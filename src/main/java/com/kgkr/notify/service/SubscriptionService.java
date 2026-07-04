@@ -10,8 +10,6 @@ import java.util.List;
 @Service
 public class SubscriptionService {
 
-    private static long count = 1;
-
     private final SubscriptionRepo subscriptionRepo;
 
     public SubscriptionService(SubscriptionRepo subscriptionRepo) {
@@ -22,7 +20,6 @@ public class SubscriptionService {
         Subscription sub = new Subscription();
         sub.setUserId(request.getUserId());
         sub.setChannelId(request.getChannelId());
-        sub.setId(count++);
         subscriptionRepo.save(sub);
     }
 

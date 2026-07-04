@@ -1,13 +1,14 @@
 package com.kgkr.notify.controller;
 
 import com.kgkr.notify.dto.ChannelEvent;
+import com.kgkr.notify.dto.Notification;
 import com.kgkr.notify.dto.NotificationDto;
 import com.kgkr.notify.service.NotificationService;
 import com.kgkr.notify.service.SubscriptionService;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/notifications")
@@ -33,5 +34,25 @@ public class NotificationController {
 
         notificationService.broadcastToSubscribers(subscribers, dto);
         return "Notification sent to " + subscribers.size() + " subscribers.";
+    }
+
+    @GetMapping
+    public List<Notification> getHistory(@RequestParam Long userId) {
+        return notificationService.getNotificationHistory(userId);
+    }
+
+    @PutMapping("/{id}/read")
+    public ResponseEntity<Notification> markAsRead(@PathVariable String id) {
+        Notification updated = notificationService.markAsRead(id);
+        if (updated != null) {
+            return ResponseEntity.ok(updated);
+        }
+        return ResponseEntity.notFound().build();
+    }
+
+    @PutMapping("/user/{userId}/read-all")
+    public ResponseEntity<String> markAllAsRead(@PathVariable Long userId) {
+        notificationService.markAllAsRead(userId);
+        return ResponseEntity.ok("All notifications marked as read for user " + userId);
     }
 }
