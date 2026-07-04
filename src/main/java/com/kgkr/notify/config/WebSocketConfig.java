@@ -1,5 +1,6 @@
 package com.kgkr.notify.config;
 
+import com.kgkr.notify.service.AuthService;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -18,6 +19,12 @@ import java.security.Principal;
 @Configuration
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    private final AuthService authService;
+
+    public WebSocketConfig(AuthService authService) {
+        this.authService = authService;
+    }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
@@ -44,11 +51,23 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
                 StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
                 if (StompCommand.CONNECT.equals(accessor.getCommand())) {
-                    // read userId from headers
+                    // read userId and token from headers
                     String userId = accessor.getFirstNativeHeader("login");
-                    if (userId != null) {
-                        Principal principal = () -> userId;
-                        accessor.setUser(principal);
+                    String token = accessor.getFirstNativeHeader("auth-token");
+                    if (userId != null && token != null) {
+                        try {
+                            Long uId = Long.parseLong(userId);
+                            if (authService.validateToken(uId, token)) {
+                                Principal principal = () -> userId;
+                                accessor.setUser(principal);
+                            } else {
+                                throw new IllegalArgumentException("Invalid authentication token!");
+                            }
+                        } catch (NumberFormatException e) {
+                            throw new IllegalArgumentException("User ID must be a numeric value!");
+                        }
+                    } else {
+                        throw new IllegalArgumentException("Missing login or auth-token headers!");
                     }
                 }
                 return message;

@@ -572,6 +572,10 @@
                             <label for="inputUserId">Your User ID</label>
                             <input type="number" id="inputUserId" class="form-input" placeholder="e.g. 1001" required min="1">
                         </div>
+                        <div class="form-group">
+                            <label for="inputUserName">Your Name (for signup)</label>
+                            <input type="text" id="inputUserName" class="form-input" placeholder="e.g. Alice Smith">
+                        </div>
                         <button type="submit" class="btn">Connect & Open Dashboard</button>
                     </form>
                 </div>
@@ -668,6 +672,8 @@
     <script>
         let stompClient = null;
         let currentUserId = null;
+        let currentUserName = null;
+        let currentUserToken = null;
         let subscriptions = new Set();
         let notifications = [];
 
@@ -695,10 +701,35 @@
         function handleConnect(event) {
             event.preventDefault();
             const userIdInput = document.getElementById("inputUserId").value;
+            const userNameInput = document.getElementById("inputUserName").value;
             if (!userIdInput) return;
 
-            currentUserId = parseInt(userIdInput);
-            connectWebSocket();
+            const uId = parseInt(userIdInput);
+            
+            // Step 1: Perform Auth Login / Registration
+            fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: uId, name: userNameInput })
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error("Authentication failed");
+                }
+                return res.json();
+            })
+            .then(user => {
+                currentUserId = user.id;
+                currentUserName = user.name;
+                currentUserToken = user.token;
+                
+                showToast(`Authenticated as ${currentUserName}! Connecting to real-time service...`, "success");
+                connectWebSocket();
+            })
+            .catch(err => {
+                console.error(err);
+                showToast("Failed to authenticate with backend server.", "error");
+            });
         }
 
         function connectWebSocket() {
@@ -711,12 +742,16 @@
             const statusDot = document.getElementById("statusDot");
             const labelUserConnected = document.getElementById("labelUserConnected");
 
-            stompClient.connect({ login: currentUserId.toString() }, (frame) => {
+            // Pass login & auth-token headers
+            stompClient.connect({ 
+                login: currentUserId.toString(),
+                "auth-token": currentUserToken
+            }, (frame) => {
                 statusDot.classList.add("online");
-                labelUserConnected.innerText = `Connected as User ${currentUserId}`;
+                labelUserConnected.innerText = `${currentUserName} (User ${currentUserId})`;
                 
                 showScreen("screenDashboard");
-                showToast("Connected successfully to WebSocket server!", "success");
+                showToast("Connected to real-time notifications!", "success");
 
                 // Subscribe to personal notification queue
                 stompClient.subscribe("/user/queue/notifications", (message) => {
@@ -730,7 +765,7 @@
             }, (error) => {
                 console.error("STOMP Error:", error);
                 statusDot.classList.remove("online");
-                showToast("Connection failed! Make sure the backend server is running.", "error");
+                showToast("Real-time connection failed/refused.", "error");
                 handleDisconnect();
             });
         }
@@ -745,6 +780,8 @@
             
             // Clean up state
             currentUserId = null;
+            currentUserName = null;
+            currentUserToken = null;
             subscriptions.clear();
             notifications = [];
             
@@ -754,8 +791,6 @@
 
         // Subscriptions Management
         function loadLocalSubscriptions() {
-            // In a complete app, we'd fetch from subscription DB, but we will maintain a local set and update UI
-            // To be robust, let's sync with any stored channel subscriptions if the user refreshed (simulated here)
             updateSubscriptionsUI();
         }
 
@@ -765,10 +800,13 @@
             const channelId = parseInt(channelIdInput.value);
             if (!channelId) return;
 
-            // Call REST API
+            // Call REST API with auth header
             fetch("/api/subscriptions/subscribe", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                    "Content-Type": "application/json",
+                    "X-Auth-Token": currentUserToken
+                },
                 body: JSON.stringify({ userId: currentUserId, channelId: channelId })
             })
             .then(res => {
@@ -778,7 +816,7 @@
                     channelIdInput.value = "";
                     showToast(`Subscribed to Channel ${channelId}!`, "success");
                 } else {
-                    showToast("Subscription failed.", "error");
+                    showToast("Subscription failed (Unauthorized).", "error");
                 }
             })
             .catch(err => {
@@ -808,8 +846,15 @@
 
         // Notification management
         function fetchNotificationHistory() {
-            fetch(`/api/notifications?userId=${currentUserId}`)
-            .then(res => res.json())
+            fetch(`/api/notifications?userId=${currentUserId}`, {
+                headers: { "X-Auth-Token": currentUserToken }
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error("Unauthorized history access");
+                }
+                return res.json();
+            })
             .then(data => {
                 notifications = data;
                 // Sort by timestamp desc
@@ -818,7 +863,7 @@
             })
             .catch(err => {
                 console.error(err);
-                showToast("Failed to fetch notification history.", "error");
+                showToast("Failed to fetch notification history (Unauthorized).", "error");
             });
         }
 
@@ -888,7 +933,8 @@
 
         function handleMarkAsRead(id) {
             fetch(`/api/notifications/${id}/read`, {
-                method: "PUT"
+                method: "PUT",
+                headers: { "X-Auth-Token": currentUserToken }
             })
             .then(res => {
                 if (res.ok) {
@@ -899,6 +945,8 @@
                         renderNotifications();
                         showToast("Notification marked as read.", "success");
                     }
+                } else {
+                    showToast("Failed to mark as read (Unauthorized).", "error");
                 }
             })
             .catch(err => console.error(err));
@@ -906,13 +954,16 @@
 
         function handleMarkAllAsRead() {
             fetch(`/api/notifications/user/${currentUserId}/read-all`, {
-                method: "PUT"
+                method: "PUT",
+                headers: { "X-Auth-Token": currentUserToken }
             })
             .then(res => {
                 if (res.ok) {
                     notifications.forEach(notif => notif.read = true);
                     renderNotifications();
                     showToast("All notifications marked as read.", "success");
+                } else {
+                    showToast("Failed to mark all as read (Unauthorized).", "error");
                 }
             })
             .catch(err => console.error(err));
@@ -931,7 +982,10 @@
 
             fetch("/api/notifications/publish", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                    "Content-Type": "application/json",
+                    "X-Auth-Token": currentUserToken
+                },
                 body: JSON.stringify({
                     channelId: channelId,
                     videoId: "sim-" + Math.floor(Math.random() * 10000),
@@ -943,7 +997,7 @@
                     showToast("Event published successfully!", "success");
                     videoTitleInput.value = "";
                 } else {
-                    showToast("Failed to publish event.", "error");
+                    showToast("Failed to publish event (Unauthorized).", "error");
                 }
             })
             .catch(err => {

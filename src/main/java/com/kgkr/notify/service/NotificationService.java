@@ -82,6 +82,10 @@ public class NotificationService {
         return notificationRepo.findByUserId(userId);
     }
 
+    public Notification getNotification(String id) {
+        return notificationRepo.findById(id).orElse(null);
+    }
+
     public Notification markAsRead(String id) {
         return notificationRepo.findById(id)
                 .map(notif -> {
