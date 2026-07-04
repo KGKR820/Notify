@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Notify - Real-Time Notification Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+</head>
+<body>
+<h2>Notify — Real-Time Notification Demo</h2>
+
+<label>User ID:</label>
+<input type="text" id="userId" placeholder="Enter your userId">
+<button onclick="connect()">Connect</button>
+<button onclick="disconnect()">Disconnect</button>
+
+<h3>Status: <span id="status">Disconnected</span></h3>
+
+<div id="notifications">
+    <h3>Notifications:</h3>
+    <ul id="notifList"></ul>
+</div>
+
+<script>
+    let stompClient = null;
+
+    function connect() {
+        const userId = document.getElementById("userId").value;
+        if (!userId) {
+            alert("Enter userId first!");
+            return;
+        }
+
+        const socket = new SockJS("http://localhost:8080/ws");
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect({ login: userId }, (frame) => {
+            document.getElementById("status").innerText = "Connected as user " + userId;
+
+            console.log(userId);
+
+            // Subscribe to personal notification queue
+            stompClient.subscribe("/user/queue/notifications", (message) => {
+                console.log("user is connected" , userId );
+                console.log(message);
+                const notif = JSON.parse(message.body);
+                showNotification(notif.message, notif.channelId);
+            });
+        });
+    }
+
+    function disconnect() {
+        if (stompClient !== null) {
+            stompClient.disconnect(() => {
+                document.getElementById("status").innerText = "Disconnected";
+            });
+        }
+    }
+
+    function showNotification(message, channelId) {
+        const li = document.createElement("li");
+        li.innerText = `[Channel ${channelId}] ${message}`;
+        document.getElementById("notifList").appendChild(li);
+    }
+</script>
+</body>
+</html>
