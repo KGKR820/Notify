@@ -181,6 +181,3 @@ Notification sent to 2 subscribers.
 That confirms the full flow: subscribe → publish → real-time fan-out to every connected
 subscriber, with no page refresh.
 
-## Notes
-
-This project is for personal learning / portfolio use.
